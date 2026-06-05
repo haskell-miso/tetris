@@ -7,6 +7,8 @@ module Main where
 ----------------------------------------------------------------------------
 import           Control.Concurrent (threadDelay)
 import           Control.Monad (forever)
+import           Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IM
 import           Data.IntSet (IntSet)
 import qualified Data.IntSet as IS
 import           Data.List (foldl')
@@ -52,16 +54,17 @@ data Phase = Playing | Paused | GameOver
 type Board = [[Maybe TColor]]
 
 data Model = Model
-  { mBoard    :: Board
-  , mCur      :: Maybe Piece
-  , mNext     :: PType
-  , mScore    :: Int
-  , mLevel    :: Int
-  , mLines    :: Int
-  , mPhase    :: Phase
-  , mTick     :: Int
-  , mHeldKeys :: IntSet
-  , mRng      :: Int
+  { mBoard      :: Board
+  , mCur        :: Maybe Piece
+  , mNext       :: PType
+  , mScore      :: Int
+  , mLevel      :: Int
+  , mLines      :: Int
+  , mPhase      :: Phase
+  , mTick       :: Int
+  , mHeldKeys   :: IntSet
+  , mKeyTimers  :: IntMap Int
+  , mRng        :: Int
   } deriving (Show, Eq)
 
 data Action
@@ -109,16 +112,17 @@ mkModel seed =
   let (next, rng1) = randPType seed
       (pt,   rng2) = randPType rng1
   in Model
-       { mBoard    = emptyBoard
-       , mCur      = Just (spawnPiece pt)
-       , mNext     = next
-       , mScore    = 0
-       , mLevel    = 1
-       , mLines    = 0
-       , mPhase    = Playing
-       , mTick     = 0
-       , mHeldKeys = IS.empty
-       , mRng      = rng2
+       { mBoard      = emptyBoard
+       , mCur        = Just (spawnPiece pt)
+       , mNext       = next
+       , mScore      = 0
+       , mLevel      = 1
+       , mLines      = 0
+       , mPhase      = Playing
+       , mTick       = 0
+       , mHeldKeys   = IS.empty
+       , mKeyTimers  = IM.empty
+       , mRng        = rng2
        }
 
 initModel :: Model
@@ -244,9 +248,9 @@ updateModel = \case
              then mkModel (mRng m * 6364136 + 1442695)
              else m1
          Paused ->
-           if IS.member 80 justPressed  -- P to unpause
-             then m1 { mPhase = Playing }
-             else m1
+           if IS.member 82 justPressed then mkModel (mRng m * 6364136 + 1442695)
+           else if IS.member 80 justPressed then m1 { mPhase = Playing }
+           else m1
          Playing ->
            foldl' applyInstantKey m1 (IS.toList justPressed)
 
@@ -257,9 +261,9 @@ updateModel = \case
 
 applyInstantKey :: Model -> Int -> Model
 applyInstantKey m = \case
-  38 -> tryRotate m
   32 -> doHardDrop m
   80 -> m { mPhase = Paused }
+  82 -> mkModel (mRng m * 6364136 + 1442695)
   _  -> m
 
 tryMove :: Model -> Int -> Int -> Model
@@ -286,22 +290,38 @@ doHardDrop m = case mCur m of
   Nothing -> m
   Just p  -> lockAndSpawn m (hardDrop (mBoard m) p)
 
+-- DAS: 6 ticks (~300ms) initial delay, then auto-repeat
+dasDelay :: Int
+dasDelay = 6
+
+-- True on tick 1 (immediate) and then every `arr` ticks after the DAS delay
+firesMove :: Int -> Int -> Bool
+firesMove arr t = t == 1 || (t > dasDelay && (t - dasDelay - 1) `mod` arr == 0)
+
 processTick :: Model -> Model
 processTick m =
-  let keys = mHeldKeys m
-      m1   = if IS.member 37 keys then tryMove m  (-1) 0 else m
-      m2   = if IS.member 39 keys then tryMove m1   1  0 else m1
-      m3   = if IS.member 40 keys then tryMove m2   0  1 else m2
-      t    = mTick m3 + 1
-  in if t < ticksPerDrop (mLevel m3)
-       then m3 { mTick = t }
-       else case mCur m3 of
-              Nothing -> spawnNext m3 { mTick = 0 }
+  let keys      = mHeldKeys m
+      oldTimers = mKeyTimers m
+      newTimers = IM.fromList
+        [ (k, 1 + IM.findWithDefault 0 k oldTimers)
+        | k <- IS.toList keys
+        ]
+      fire arr k = maybe False (firesMove arr) (IM.lookup k newTimers)
+      m1 = if fire    2 37 then tryMove   m  (-1) 0 else m   -- left:   100ms ARR
+      m2 = if fire    2 39 then tryMove   m1   1  0 else m1  -- right:  100ms ARR
+      m3 = if fire    1 40 then tryMove   m2   0  1 else m2  -- down:    50ms ARR
+      m4 = if fire    2 38 then tryRotate m3        else m3  -- rotate: 100ms ARR
+      m5 = m4 { mKeyTimers = newTimers }
+      t  = mTick m5 + 1
+  in if t < ticksPerDrop (mLevel m5)
+       then m5 { mTick = t }
+       else case mCur m5 of
+              Nothing -> spawnNext m5 { mTick = 0 }
               Just p  ->
                 let p' = p { pY = pY p + 1 }
-                in if isValid (mBoard m3) p'
-                     then m3 { mCur = Just p', mTick = 0 }
-                     else lockAndSpawn m3 p
+                in if isValid (mBoard m5) p'
+                     then m5 { mCur = Just p', mTick = 0 }
+                     else lockAndSpawn m5 p
 
 lockAndSpawn :: Model -> Piece -> Model
 lockAndSpawn m p =
@@ -348,7 +368,7 @@ viewModel _ m =
         , CSS.width "100%"
         , CSS.height "100%"
         , CSS.overflow "hidden"
-        , CSS.backgroundColor (CSS.hex "0d0d1a")
+        , CSS.backgroundColor (CSS.hex "141428")
         , CSS.fontFamily "'Courier New', monospace"
         ]
     ]
@@ -383,7 +403,7 @@ viewModel _ m =
         [ CSS.style_
             [ CSS.marginTop (CSS.px 12)
             , CSS.fontSize (CSS.rem 0.7)
-            , CSS.color (CSS.hex "555577")
+            , CSS.color (CSS.hex "9999cc")
             , CSS.letterSpacing (CSS.em 0.1)
             ]
         ]
@@ -403,8 +423,8 @@ viewBoard m =
        , SP.viewBox_ ("0 0 " <> ms w <> " " <> ms h)
        , CSS.style_
            [ CSS.display "block"
-           , CSS.border "2px solid #222244"
-           , CSS.boxShadow "0 0 30px rgba(0,240,240,0.12)"
+           , CSS.border "2px solid #5555bb"
+           , CSS.boxShadow "0 0 40px rgba(0,240,240,0.35)"
            ]
        ]
        ( bgCells
@@ -421,9 +441,9 @@ bgCells =
       , SP.y_ (ms (r * cellSz))
       , HP.width_  (ms cellSz)
       , HP.height_ (ms cellSz)
-      , SP.fill_ (if even (r + c) then "#09091a" else "#0c0c1e")
-      , SP.stroke_ "#0f0f28"
-      , SP.strokeWidth_ "0.5"
+      , SP.fill_ (if even (r + c) then "#1c1c3c" else "#232350")
+      , SP.stroke_ "#2e2e60"
+      , SP.strokeWidth_ "1"
       ]
   | r <- [0..boardH-1], c <- [0..boardW-1]
   ]
@@ -436,7 +456,7 @@ boardCells board =
       , HP.width_  (ms (cellSz - 2))
       , HP.height_ (ms (cellSz - 2))
       , SP.fill_        (colorHex col)
-      , SP.stroke_      (colorHex col <> "99")
+      , SP.stroke_      (colorHex col <> "cc")
       , SP.strokeWidth_ "1"
       , SP.rx_          "3"
       ]
@@ -453,8 +473,8 @@ ghostCells p =
       , HP.height_ (ms (cellSz - 6))
       , SP.fill_        "none"
       , SP.stroke_      (pieceColorHex (pType p))
-      , SP.strokeWidth_ "1.5"
-      , SP.opacity_     "0.3"
+      , SP.strokeWidth_ "2"
+      , SP.opacity_     "0.55"
       , SP.rx_          "2"
       ]
   | (r, c) <- pieceCells p, r >= 0
@@ -468,7 +488,7 @@ activeCells p =
       , HP.width_  (ms (cellSz - 2))
       , HP.height_ (ms (cellSz - 2))
       , SP.fill_        (pieceColorHex (pType p))
-      , SP.stroke_      "#ffffff44"
+      , SP.stroke_      "#ffffff88"
       , SP.strokeWidth_ "1"
       , SP.rx_          "3"
       ]
@@ -532,8 +552,8 @@ infoCard :: MisoString -> View Model Action -> View Model Action
 infoCard label inner =
   H.div_
     [ CSS.style_
-        [ CSS.background "#0e0e22"
-        , CSS.border "1px solid #1e1e44"
+        [ CSS.background "#1c1c3a"
+        , CSS.border "1px solid #3a3a70"
         , CSS.borderRadius "6px"
         , CSS.padding "10px 14px"
         , CSS.boxShadow "0 2px 12px rgba(0,0,0,0.5)"
@@ -543,7 +563,7 @@ infoCard label inner =
         [ CSS.style_
             [ CSS.fontSize "0.65rem"
             , CSS.letterSpacing "0.2em"
-            , CSS.color (CSS.hex "555577")
+            , CSS.color (CSS.hex "9999cc")
             , CSS.margin "0 0 6px 0"
             ]
         ]
@@ -559,7 +579,7 @@ statLabel val =
         , CSS.fontWeight "bold"
         , CSS.color (CSS.hex "00f0f0")
         , CSS.margin "0"
-        , CSS.textShadow "0 0 10px rgba(0,240,240,0.4)"
+        , CSS.textShadow "0 0 12px rgba(0,240,240,0.7)"
         ]
     ]
     [ text val ]
@@ -595,10 +615,10 @@ restartBtn =
   H.button_
     [ SV.onClick Restart
     , CSS.style_
-        [ CSS.background "#0e0e22"
-        , CSS.border "1px solid #1e1e44"
+        [ CSS.background "#1c1c3a"
+        , CSS.border "1px solid #3a3a70"
         , CSS.borderRadius "6px"
-        , CSS.color (CSS.hex "888899")
+        , CSS.color (CSS.hex "bbbbdd")
         , CSS.padding "10px"
         , CSS.fontSize (CSS.rem 0.8)
         , CSS.letterSpacing "0.1em"
