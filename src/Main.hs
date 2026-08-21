@@ -71,6 +71,11 @@ data Action
   = Tick
   | Keys IntSet
   | Restart
+  | TouchLeft
+  | TouchRight
+  | TouchDown
+  | TouchRotate
+  | TouchDrop
   deriving (Show, Eq)
 ----------------------------------------------------------------------------
 main :: IO ()
@@ -259,6 +264,17 @@ updateModel = \case
       Playing -> processTick m
       _       -> m
 
+  TouchLeft   -> modify $ whenPlaying $ \m -> tryMove m (-1) 0
+  TouchRight  -> modify $ whenPlaying $ \m -> tryMove m 1 0
+  TouchDown   -> modify $ whenPlaying $ \m -> tryMove m 0 1
+  TouchRotate -> modify $ whenPlaying tryRotate
+  TouchDrop   -> modify $ whenPlaying doHardDrop
+
+whenPlaying :: (Model -> Model) -> Model -> Model
+whenPlaying f m
+  | mPhase m == Playing = f m
+  | otherwise           = m
+
 applyInstantKey :: Model -> Int -> Model
 applyInstantKey m = \case
   32 -> doHardDrop m
@@ -357,28 +373,9 @@ spawnNext m =
 viewModel :: props -> Model -> View Model Action
 viewModel _ m =
   H.div_
-    [ CSS.style_
-        [ CSS.display "flex"
-        , CSS.flexDirection "column"
-        , CSS.alignItems "center"
-        , CSS.justifyContent "center"
-        , CSS.position "fixed"
-        , CSS.top "0"
-        , CSS.left "0"
-        , CSS.width "100%"
-        , CSS.height "100%"
-        , CSS.overflow "hidden"
-        , CSS.backgroundColor (CSS.hex "141428")
-        , CSS.fontFamily "'Courier New', monospace"
-        ]
-    ]
+    [ HP.class_ "game-root" ]
     [ H.h1_
-        [ CSS.style_
-            [ CSS.fontSize (CSS.rem 2)
-            , CSS.letterSpacing (CSS.em 0.3)
-            , CSS.margin "0 0 16px 0"
-            ]
-        ]
+        [ HP.class_ "game-title" ]
         [ H.a_
             [ HP.href_ "https://github.com/haskell-miso/miso-tetris"
             , CSS.style_
@@ -390,23 +387,13 @@ viewModel _ m =
             [ text "miso tetris \x1F35C" ]
         ]
     , H.div_
-        [ CSS.style_
-            [ CSS.display "flex"
-            , CSS.gap "20px"
-            , CSS.alignItems "flex-start"
-            ]
-        ]
+        [ HP.class_ "game-main" ]
         [ viewBoard m
         , viewPanel m
         ]
+    , touchControls
     , H.div_
-        [ CSS.style_
-            [ CSS.marginTop (CSS.px 12)
-            , CSS.fontSize (CSS.rem 0.7)
-            , CSS.color (CSS.hex "9999cc")
-            , CSS.letterSpacing (CSS.em 0.1)
-            ]
-        ]
+        [ HP.class_ "help-text" ]
         [ text "\8592\8594 move  \8593 rotate  \8595 soft drop  SPC hard drop  P pause  R restart" ]
     ]
 
@@ -421,11 +408,7 @@ viewBoard m =
        [ HP.width_  (ms w)
        , HP.height_ (ms h)
        , SP.viewBox_ ("0 0 " <> ms w <> " " <> ms h)
-       , CSS.style_
-           [ CSS.display "block"
-           , CSS.border "2px solid #5555bb"
-           , CSS.boxShadow "0 0 40px rgba(0,240,240,0.35)"
-           ]
+       , HP.class_ "board-svg"
        ]
        ( bgCells
       ++ boardCells (mBoard m)
@@ -534,13 +517,7 @@ svgLabel x y sz col txt =
 viewPanel :: Model -> View Model Action
 viewPanel m =
   H.div_
-    [ CSS.style_
-        [ CSS.display "flex"
-        , CSS.flexDirection "column"
-        , CSS.gap "14px"
-        , CSS.width "150px"
-        ]
-    ]
+    [ HP.class_ "side-panel" ]
     [ infoCard "NEXT"  (nextPieceView (mNext m))
     , infoCard "SCORE" (statLabel (ms (mScore m)))
     , infoCard "LEVEL" (statLabel (ms (mLevel m)))
@@ -609,6 +586,26 @@ nextPieceView pt =
            ]
        | (r, c) <- cells
        ]
+
+-- On-screen controls, shown on touch devices via CSS (pointer: coarse)
+touchControls :: View Model Action
+touchControls =
+  H.div_
+    [ HP.class_ "touch-controls" ]
+    [ touchBtn "\8592"  TouchLeft    -- ←
+    , touchBtn "\8595"  TouchDown    -- ↓
+    , touchBtn "\8594"  TouchRight   -- →
+    , touchBtn "\10227" TouchRotate  -- ⟳
+    , touchBtn "\10515" TouchDrop    -- ⤓
+    ]
+
+touchBtn :: MisoString -> Action -> View Model Action
+touchBtn label act =
+  H.button_
+    [ SV.onClick act
+    , HP.class_ "touch-btn"
+    ]
+    [ text label ]
 
 restartBtn :: View Model Action
 restartBtn =

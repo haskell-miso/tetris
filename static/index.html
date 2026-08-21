@@ -2,10 +2,124 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>🕹️ miso-tetris</title>
     <style>
-      html, body { margin: 0; padding: 0; background: #000000; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #000000;
+        touch-action: manipulation;
+        overscroll-behavior: none;
+      }
+
+      .game-root {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background-color: #141428;
+        font-family: 'Courier New', monospace;
+      }
+
+      .game-title {
+        font-size: 2rem;
+        letter-spacing: 0.3em;
+        margin: 0 0 16px 0;
+      }
+
+      .game-main {
+        display: flex;
+        gap: 20px;
+        align-items: flex-start;
+      }
+
+      .board-svg {
+        display: block;
+        border: 2px solid #5555bb;
+        box-shadow: 0 0 40px rgba(0, 240, 240, 0.35);
+      }
+
+      .side-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        width: 150px;
+      }
+
+      .help-text {
+        margin-top: 12px;
+        font-size: 0.7rem;
+        color: #9999cc;
+        letter-spacing: 0.1em;
+      }
+
+      .touch-controls {
+        display: none;
+        gap: 10px;
+        margin-top: 12px;
+        width: min(92vw, 420px);
+      }
+
+      .touch-btn {
+        flex: 1;
+        background: #1c1c3a;
+        border: 1px solid #3a3a70;
+        border-radius: 8px;
+        color: #00f0f0;
+        font-size: 1.4rem;
+        line-height: 1;
+        padding: 14px 0;
+        font-family: 'Courier New', monospace;
+        touch-action: manipulation;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .touch-btn:active {
+        background: #2a2a55;
+      }
+
+      /* Show on-screen controls on touch devices */
+      @media (pointer: coarse) {
+        .touch-controls { display: flex; }
+        .help-text { display: none; }
+      }
+
+      /* Stack the layout on narrow screens */
+      @media (max-width: 640px) {
+        .game-root {
+          justify-content: flex-start;
+          overflow-y: auto;
+          height: 100dvh;
+          padding: 10px 0 20px;
+          box-sizing: border-box;
+        }
+        .game-title { font-size: 1.2rem; margin: 0 0 8px 0; }
+        .game-main {
+          flex-direction: column;
+          align-items: center;
+          gap: 10px;
+        }
+        .board-svg {
+          width: min(92vw, 28vh);
+          height: auto;
+        }
+        .side-panel {
+          flex-direction: row;
+          flex-wrap: wrap;
+          justify-content: center;
+          width: min(92vw, 420px);
+          gap: 8px;
+        }
+      }
     </style>
   </head>
 
@@ -15,4 +129,3 @@
 
   </body>
 </html>
-
