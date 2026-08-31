@@ -95,7 +95,7 @@ app :: App Model Action
 app = (component initModel updateModel viewModel)
   { subs = [keyboardSub Keys, tickSub] }
 ----------------------------------------------------------------------------
-tickSub :: Sub Action
+tickSub :: Sub model Action
 tickSub sink = forever $ threadDelay 50000 >> sink Tick
 ----------------------------------------------------------------------------
 -- Pure LCG for randomness
@@ -238,7 +238,7 @@ hardDrop board p =
   in if isValid board p' then hardDrop board p' else p
 ----------------------------------------------------------------------------
 -- Update
-updateModel :: Action -> Effect parent props Model Action
+updateModel :: Action -> Effect context props Model Action
 updateModel = \case
 
   Restart -> modify $ \m -> mkModel (mRng m * 6364136 + 1442695)
