@@ -96,7 +96,7 @@ app = (component initModel updateModel viewModel)
   { subs = [keyboardSub Keys, tickSub] }
 ----------------------------------------------------------------------------
 tickSub :: Sub model Action
-tickSub _ sink = forever $ threadDelay 50000 >> sink Tick
+tickSub sink _ = forever $ threadDelay 50000 >> sink Tick
 ----------------------------------------------------------------------------
 -- Pure LCG for randomness
 nextRng :: Int -> (Int, Int)
