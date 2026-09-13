@@ -96,7 +96,7 @@ app = (component initModel updateModel viewModel)
   { subs = [keyboardSub Keys, tickSub] }
 ----------------------------------------------------------------------------
 tickSub :: Sub model Action
-tickSub _ sink = forever $ threadDelay 50000 >> sink Tick
+tickSub sink _ = forever $ threadDelay 50000 >> sink Tick
 ----------------------------------------------------------------------------
 -- Pure LCG for randomness
 nextRng :: Int -> (Int, Int)
@@ -370,8 +370,8 @@ spawnNext m =
        else m { mCur = Just newPiece, mNext = next', mRng = rng' }
 ----------------------------------------------------------------------------
 -- View
-viewModel :: context -> props -> Model -> View context Model Action
-viewModel _ _ m =
+viewModel :: Model -> View context props Model Action
+viewModel m =
   H.div_
     [ HP.class_ "game-root" ]
     [ H.h1_
@@ -397,7 +397,7 @@ viewModel _ _ m =
         [ text "\8592\8594 move  \8593 rotate  \8595 soft drop  SPC hard drop  P pause  R restart" ]
     ]
 
-viewBoard :: Model -> View context Model Action
+viewBoard :: Model -> View context props Model Action
 viewBoard m =
   let w     = boardW * cellSz
       h     = boardH * cellSz
@@ -417,7 +417,7 @@ viewBoard m =
       ++ overlayViews m
        )
 
-bgCells :: [View context Model Action]
+bgCells :: [View context props Model Action]
 bgCells =
   [ SV.rect_
       [ SP.x_ (ms (c * cellSz))
@@ -431,7 +431,7 @@ bgCells =
   | r <- [0..boardH-1], c <- [0..boardW-1]
   ]
 
-boardCells :: Board -> [View context Model Action]
+boardCells :: Board -> [View context props Model Action]
 boardCells board =
   [ SV.rect_
       [ SP.x_ (ms (c * cellSz + 1))
@@ -447,7 +447,7 @@ boardCells board =
   , (c, Just col) <- zip [0..] row
   ]
 
-ghostCells :: Piece -> [View context Model Action]
+ghostCells :: Piece -> [View context props Model Action]
 ghostCells p =
   [ SV.rect_
       [ SP.x_ (ms (c * cellSz + 3))
@@ -463,7 +463,7 @@ ghostCells p =
   | (r, c) <- pieceCells p, r >= 0
   ]
 
-activeCells :: Piece -> [View context Model Action]
+activeCells :: Piece -> [View context props Model Action]
 activeCells p =
   [ SV.rect_
       [ SP.x_ (ms (c * cellSz + 1))
@@ -478,7 +478,7 @@ activeCells p =
   | (r, c) <- pieceCells p, r >= 0
   ]
 
-overlayViews :: Model -> [View context Model Action]
+overlayViews :: Model -> [View context props Model Action]
 overlayViews m =
   let w = boardW * cellSz
       h = boardH * cellSz
@@ -502,7 +502,7 @@ overlayViews m =
          ]
        Playing -> []
 
-svgLabel :: MisoString -> MisoString -> MisoString -> MisoString -> MisoString -> View context Model Action
+svgLabel :: MisoString -> MisoString -> MisoString -> MisoString -> MisoString -> View context props Model Action
 svgLabel x y sz col txt =
   SV.text_
     [ SP.x_ x, SP.y_ y
@@ -514,7 +514,7 @@ svgLabel x y sz col txt =
     ]
     [ text txt ]
 
-viewPanel :: Model -> View context Model Action
+viewPanel :: Model -> View context props Model Action
 viewPanel m =
   H.div_
     [ HP.class_ "side-panel" ]
@@ -525,7 +525,7 @@ viewPanel m =
     , restartBtn
     ]
 
-infoCard :: MisoString -> View context Model Action -> View context Model Action
+infoCard :: MisoString -> View context props Model Action -> View context props Model Action
 infoCard label inner =
   H.div_
     [ CSS.style_
@@ -548,7 +548,7 @@ infoCard label inner =
     , inner
     ]
 
-statLabel :: MisoString -> View context Model Action
+statLabel :: MisoString -> View context props Model Action
 statLabel val =
   H.p_
     [ CSS.style_
@@ -561,7 +561,7 @@ statLabel val =
     ]
     [ text val ]
 
-nextPieceView :: PType -> View context Model Action
+nextPieceView :: PType -> View context props Model Action
 nextPieceView pt =
   let preview   = Piece { pType = pt, pX = 0, pY = 0, pRot = 0 }
       cells     = pieceCells preview
@@ -588,7 +588,7 @@ nextPieceView pt =
        ]
 
 -- On-screen controls, shown on touch devices via CSS (pointer: coarse)
-touchControls :: View context Model Action
+touchControls :: View context props Model Action
 touchControls =
   H.div_
     [ HP.class_ "touch-controls" ]
@@ -599,7 +599,7 @@ touchControls =
     , touchBtn "\10515" TouchDrop    -- ⤓
     ]
 
-touchBtn :: MisoString -> Action -> View context Model Action
+touchBtn :: MisoString -> Action -> View context props Model Action
 touchBtn label act =
   H.button_
     [ SV.onClick act
@@ -607,7 +607,7 @@ touchBtn label act =
     ]
     [ text label ]
 
-restartBtn :: View context Model Action
+restartBtn :: View context props Model Action
 restartBtn =
   H.button_
     [ SV.onClick Restart
